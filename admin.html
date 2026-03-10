@@ -1,0 +1,378 @@
+```html
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Admin CS BOT SPACEMAN</title>
+
+<style>
+
+body{
+margin:0;
+font-family:Arial;
+background:#2b2d31;
+color:white;
+display:flex;
+height:100vh;
+}
+
+.sidebar{
+width:270px;
+background:#1e1f22;
+display:flex;
+flex-direction:column;
+border-right:1px solid #2f3136;
+}
+
+.logo{
+padding:15px;
+font-weight:bold;
+border-bottom:1px solid #2f3136;
+}
+
+.users{
+flex:1;
+overflow:auto;
+}
+
+.user{
+padding:14px;
+cursor:pointer;
+border-bottom:1px solid #2f3136;
+}
+
+.user:hover{
+background:#313338;
+}
+
+.chat{
+flex:1;
+display:flex;
+flex-direction:column;
+}
+
+.header{
+padding:12px;
+background:#1e1f22;
+border-bottom:1px solid #2f3136;
+display:flex;
+justify-content:space-between;
+align-items:center;
+}
+
+.actions button{
+margin-left:6px;
+padding:6px 10px;
+border:none;
+border-radius:5px;
+background:#5865f2;
+color:white;
+cursor:pointer;
+}
+
+.messages{
+flex:1;
+overflow:auto;
+padding:20px;
+display:flex;
+flex-direction:column;
+gap:10px;
+}
+
+.message{
+display:flex;
+gap:10px;
+max-width:70%;
+}
+
+.me{
+align-self:flex-end;
+flex-direction:row-reverse;
+}
+
+.avatar{
+width:35px;
+height:35px;
+border-radius:50%;
+background:#5865f2;
+display:flex;
+align-items:center;
+justify-content:center;
+font-weight:bold;
+}
+
+.bubble{
+background:#40444b;
+padding:10px 15px;
+border-radius:10px;
+display:flex;
+flex-direction:column;
+}
+
+.me .bubble{
+background:#5865f2;
+}
+
+.time{
+font-size:11px;
+opacity:0.7;
+margin-top:4px;
+text-align:right;
+}
+
+.input{
+display:flex;
+padding:10px;
+background:#1e1f22;
+}
+
+.input input{
+flex:1;
+padding:10px;
+border:none;
+border-radius:5px;
+}
+
+.input button{
+margin-left:10px;
+padding:10px 20px;
+border:none;
+background:#5865f2;
+color:white;
+border-radius:5px;
+cursor:pointer;
+}
+
+</style>
+</head>
+
+<body>
+
+<div class="sidebar">
+
+<div class="logo">
+CS BOT SPACEMAN
+</div>
+
+<div id="users" class="users"></div>
+
+</div>
+
+<div class="chat">
+
+<div class="header">
+
+<span id="chatTitle">Pilih Customer</span>
+
+<div class="actions">
+<button onclick="blockUser()">Block</button>
+<button onclick="unblockUser()">Unblock</button>
+<button onclick="deleteUser()">Hapus</button>
+</div>
+
+</div>
+
+<div id="messages" class="messages"></div>
+
+<div class="input">
+<input id="msg" placeholder="Balas pesan...">
+<button onclick="send()">Kirim</button>
+</div>
+
+</div>
+
+<script type="module">
+
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getDatabase, ref, push, onValue, onChildAdded, remove, set, off }
+from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+const firebaseConfig={
+apiKey:"AIzaSyBnR-fwiSndf3FM2MFEkh03WGooDAk-6n8",
+authDomain:"csid-369c0.firebaseapp.com",
+databaseURL:"https://csid-369c0-default-rtdb.firebaseio.com",
+projectId:"csid-369c0"
+};
+
+const app=initializeApp(firebaseConfig);
+const db=getDatabase(app);
+
+const usersDiv=document.getElementById("users");
+const messages=document.getElementById("messages");
+
+let currentRoom=null;
+let currentUser=null;
+let messageListener=null;
+
+let listeners={};
+
+/* FORMAT JAM */
+
+function formatTime(t){
+
+let d;
+
+if(!t){
+d=new Date(); 
+}else{
+d=new Date(t);
+}
+
+let h=d.getHours().toString().padStart(2,"0");
+let m=d.getMinutes().toString().padStart(2,"0");
+
+return h+":"+m;
+
+}
+
+/* LOAD CUSTOMER */
+
+onValue(ref(db,"rooms"),(snap)=>{
+
+usersDiv.innerHTML="";
+
+snap.forEach((child)=>{
+
+let room=child.key;
+let name=room.replace("room_","");
+
+let div=document.createElement("div");
+
+div.className="user";
+div.dataset.user=name;
+div.innerText=name;
+
+div.onclick=()=>openRoom(room,name);
+
+usersDiv.appendChild(div);
+
+listenMessages(room,name);
+
+});
+
+});
+
+/* NAIKKAN CUSTOMER YANG CHAT */
+
+function listenMessages(room,name){
+
+if(listeners[room]) return;
+
+listeners[room]=true;
+
+onChildAdded(ref(db,"rooms/"+room+"/messages"),()=>{
+
+let el=document.querySelector('[data-user="'+name+'"]');
+
+if(!el) return;
+
+usersDiv.insertBefore(el,usersDiv.firstChild);
+
+});
+
+}
+
+/* OPEN ROOM */
+
+function openRoom(room,name){
+
+currentRoom=room;
+currentUser=name;
+
+messages.innerHTML="";
+
+document.getElementById("chatTitle").innerText="Chat dengan "+name;
+
+if(messageListener){
+off(ref(db,"rooms/"+room+"/messages"));
+}
+
+messageListener=onChildAdded(ref(db,"rooms/"+room+"/messages"),(snap)=>{
+
+let msg=snap.val();
+
+let me=msg.sender==="Admin";
+
+let div=document.createElement("div");
+
+div.className="message "+(me?"me":"");
+
+div.innerHTML=
+"<div class='avatar'>"+msg.sender[0]+"</div>"+
+"<div class='bubble'>"+
+msg.text+
+"<div class='time'>"+formatTime(msg.time)+"</div>"+
+"</div>";
+
+messages.appendChild(div);
+
+messages.scrollTop=messages.scrollHeight;
+
+});
+
+}
+
+/* SEND */
+
+window.send=function(){
+
+let text=document.getElementById("msg").value;
+
+if(!text||!currentRoom) return;
+
+push(ref(db,"rooms/"+currentRoom+"/messages"),{
+
+sender:"Admin",
+text:text,
+time:Date.now()
+
+});
+
+document.getElementById("msg").value="";
+
+}
+
+/* BLOCK */
+
+window.blockUser=function(){
+
+if(!currentUser) return;
+
+set(ref(db,"blocked/"+currentUser),true);
+
+alert("Customer diblock");
+
+}
+
+/* UNBLOCK */
+
+window.unblockUser=function(){
+
+if(!currentUser) return;
+
+remove(ref(db,"blocked/"+currentUser));
+
+alert("Customer dibuka blokir");
+
+}
+
+/* DELETE */
+
+window.deleteUser=function(){
+
+if(!currentRoom) return;
+
+if(!confirm("Hapus customer dan chat?")) return;
+
+remove(ref(db,"rooms/"+currentRoom));
+
+messages.innerHTML="";
+document.getElementById("chatTitle").innerText="Customer dihapus";
+
+}
+
+</script>
+
+</body>
+</html>
+```
